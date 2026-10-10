@@ -11,6 +11,9 @@
 
     <artifactId>core-inbox</artifactId>
 
+    <name>JavaCoreLibraries :: Core Transactional Inbox</name>
+    <description>High-performance Transactional Inbox message log processing engine featuring native PostgreSQL time-series partitioning and Virtual Threads execution loops.</description>
+
     <dependencies>
         <dependency>
             <groupId>io.github.dgavrikov</groupId>
