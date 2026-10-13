@@ -3,8 +3,10 @@ package io.github.dgavrikov.core.inbox.service;
 import io.github.dgavrikov.core.inbox.model.InboxEvent;
 import io.github.dgavrikov.core.inbox.model.InboxPayloadPlugin;
 import io.github.dgavrikov.core.inbox.repository.InboxRepository;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -38,6 +40,8 @@ public class InboxPlatformCoordinator {
      */
     private final InboxRepository inboxRepository;
 
+    private final MeterRegistry meterRegistry;
+
     /**
      * Initializes the entry point coordinator facade instance and automatically constructs the
      * isolated internal extension plugin taxonomy dictionary map.
@@ -45,10 +49,12 @@ public class InboxPlatformCoordinator {
     public InboxPlatformCoordinator(
             BlockingQueue<InboxEvent<?>> inboxMemoryQueue,
             Collection<InboxPayloadPlugin<?>> inboxPayloadPlugins,
-            InboxRepository inboxRepository
+            InboxRepository inboxRepository,
+            MeterRegistry meterRegistry
     ) {
         this.inboxMemoryQueue = inboxMemoryQueue;
         this.inboxRepository = inboxRepository;
+        this.meterRegistry = meterRegistry;
         this.pluginRegistry = CollectionUtils.isEmpty(inboxPayloadPlugins)
                 ? Map.of()
                 : inboxPayloadPlugins.stream()
@@ -77,6 +83,7 @@ public class InboxPlatformCoordinator {
         InboxPayloadPlugin<?> plugin = pluginRegistry.get(eventTypeName);
         if (plugin == null) {
             log.error("No registered core-inbox plugin found for event type: [{}]. Dropping message.", eventTypeName);
+            incrementMeterCounter(InboxMeterCounter.PLUGIN_NOT_REGISTRY);
             return false;
         }
 
@@ -85,6 +92,7 @@ public class InboxPlatformCoordinator {
         if (domainContextOpt.isEmpty()) {
             log.error("Poison pill detected for messageId: [{}], type: [{}]. Message dropped before DB persist.",
                     messageId, eventTypeName);
+            incrementMeterCounter(InboxMeterCounter.PAYLOAD_VALIDATION_ERROR);
             return false;
         }
 
@@ -101,6 +109,7 @@ public class InboxPlatformCoordinator {
         boolean isInserted = inboxRepository.save(inboxEvent);
         if (!isInserted) {
             log.debug("Duplicate message detected and skipped at DB primary-key layer: {}", messageId);
+            incrementMeterCounter(InboxMeterCounter.DUPLICATE_MESSAGE_DB_DATABASE);
             return false;
         }
 
@@ -130,6 +139,13 @@ public class InboxPlatformCoordinator {
             // Buffer capacity bound reached. Row is abandoned in memory but remains committed as 'PROCESSING' inside the DB.
             // The distributed background recovery engine will safely sweep, unlock, and process it during a later cycle.
             log.warn("Inbox In-Memory buffer is FULL. Event {} left in DB for async Recovery Engine sweep.", event.messageId());
+            incrementMeterCounter(InboxMeterCounter.MEMORY_QUEUE_IS_FULL);
         }
+    }
+
+    private void incrementMeterCounter(@NotNull InboxMeterCounter counter) {
+        if (meterRegistry == null)
+            return;
+        meterRegistry.counter(counter.getCounterName(), "service", "coordinator").increment();
     }
 }

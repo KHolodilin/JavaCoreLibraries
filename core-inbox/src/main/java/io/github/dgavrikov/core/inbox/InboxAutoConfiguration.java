@@ -11,6 +11,8 @@ import io.github.dgavrikov.core.inbox.repository.InboxRepositoryDefault;
 import io.github.dgavrikov.core.inbox.service.InboxBatchProcessor;
 import io.github.dgavrikov.core.inbox.service.InboxMaintenanceWorker;
 import io.github.dgavrikov.core.inbox.service.InboxPlatformCoordinator;
+import io.micrometer.core.instrument.Meter;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -73,14 +75,16 @@ public class InboxAutoConfiguration {
             BlockingQueue<InboxEvent<?>> inboxMemoryQueue,
             Collection<InboxPayloadPlugin<?>> plugins,
             InboxProperties properties,
-            InboxRepository repository
+            InboxRepository repository,
+            MeterRegistry meterRegistry
     ) {
         return new InboxBatchProcessor(
                 inboxWorkerScheduler,
                 inboxMemoryQueue,
                 plugins,
                 properties,
-                repository);
+                repository,
+                meterRegistry);
     }
 
     @Bean
@@ -90,14 +94,16 @@ public class InboxAutoConfiguration {
             Collection<InboxPayloadPlugin<?>> plugins,
             TaskScheduler inboxMaintenanceScheduler,
             InboxProperties properties,
-            InboxRepository repository
+            InboxRepository repository,
+            MeterRegistry meterRegistry
     ) {
         return new InboxMaintenanceWorker(
                 inboxMemoryQueue,
                 plugins,
                 inboxMaintenanceScheduler,
                 properties,
-                repository);
+                repository,
+                meterRegistry);
     }
 
     @Bean
@@ -105,11 +111,13 @@ public class InboxAutoConfiguration {
     public InboxPlatformCoordinator inboxPlatformCoordinator(
             BlockingQueue<InboxEvent<?>> inboxMemoryQueue,
             Collection<InboxPayloadPlugin<?>> plugins,
-            InboxRepository repository
+            InboxRepository repository,
+            MeterRegistry meterRegistry
     ) {
         return new InboxPlatformCoordinator(
                 inboxMemoryQueue,
                 plugins,
-                repository);
+                repository,
+                meterRegistry);
     }
 }
