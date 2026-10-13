@@ -11,6 +11,7 @@ import io.github.dgavrikov.core.outbox.repository.OutboxRepositoryDefault;
 import io.github.dgavrikov.core.outbox.service.OutboxBatchPublisher;
 import io.github.dgavrikov.core.outbox.service.OutboxMaintenanceWorker;
 import io.github.dgavrikov.core.outbox.service.OutboxPlatformCoordinator;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -77,13 +78,15 @@ public class OutboxAutoConfiguration {
             BlockingQueue<OutboxEvent> outboxMemoryQueue,
             Collection<OutboxPayloadPlugin<?>> outboxPayloadPluginCollection,
             OutboxProperties outboxProperties,
-            OutboxRepository outboxRepository
+            OutboxRepository outboxRepository,
+            MeterRegistry meterRegistry
     ) {
         return new OutboxBatchPublisher(outboxPublisherScheduler,
                 outboxMemoryQueue,
                 outboxPayloadPluginCollection,
                 outboxProperties,
-                outboxRepository);
+                outboxRepository,
+                meterRegistry);
     }
 
     @Bean
@@ -92,12 +95,14 @@ public class OutboxAutoConfiguration {
             BlockingQueue<OutboxEvent> outboxMemoryQueue,
             TaskScheduler outboxMaintenanceScheduler,
             OutboxProperties outboxProperties,
-            OutboxRepository outboxRepository
+            OutboxRepository outboxRepository,
+            MeterRegistry meterRegistry
     ) {
         return new OutboxMaintenanceWorker(outboxMemoryQueue,
                 outboxMaintenanceScheduler,
                 outboxProperties,
-                outboxRepository);
+                outboxRepository,
+                meterRegistry);
     }
 
     @Bean
@@ -105,10 +110,12 @@ public class OutboxAutoConfiguration {
     public OutboxPlatformCoordinator outboxPlatformCoordinator(
             BlockingQueue<OutboxEvent> outboxMemoryQueue,
             Collection<OutboxPayloadPlugin<?>> outboxPayloadPluginCollection,
-            OutboxRepository outboxRepository
+            OutboxRepository outboxRepository,
+            MeterRegistry meterRegistry
     ) {
         return new OutboxPlatformCoordinator(outboxMemoryQueue,
                 outboxPayloadPluginCollection,
-                outboxRepository);
+                outboxRepository,
+                meterRegistry);
     }
 }

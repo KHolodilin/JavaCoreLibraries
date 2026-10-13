@@ -5,8 +5,10 @@ import io.github.dgavrikov.core.outbox.model.OutboxPayloadPlugin;
 import io.github.dgavrikov.core.outbox.model.OutboxStatus;
 import io.github.dgavrikov.core.outbox.properties.OutboxProperties;
 import io.github.dgavrikov.core.outbox.repository.OutboxRepository;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationListener;
@@ -31,17 +33,21 @@ public class OutboxBatchPublisher implements ApplicationListener<ApplicationRead
     private final TaskScheduler outboxScheduler;
     private final OutboxProperties outboxProperties;
     private final OutboxRepository outboxRepository;
+    private final MeterRegistry meterRegistry;
 
     public OutboxBatchPublisher(
             TaskScheduler outboxScheduler,
             BlockingQueue<OutboxEvent> outboxMemoryQueue,
             Collection<OutboxPayloadPlugin<?>> outboxPayloadPluginCollection,
             OutboxProperties outboxProperties,
-            OutboxRepository outboxRepository) {
+            OutboxRepository outboxRepository,
+            MeterRegistry meterRegistry) {
         this.outboxMemoryQueue = outboxMemoryQueue;
         this.outboxScheduler = outboxScheduler;
         this.outboxProperties = outboxProperties;
         this.outboxRepository = outboxRepository;
+        this.meterRegistry = meterRegistry;
+
         factoryRegistry = CollectionUtils.isEmpty(outboxPayloadPluginCollection)
                 ? Map.of()
                 : outboxPayloadPluginCollection.stream()
@@ -92,6 +98,7 @@ public class OutboxBatchPublisher implements ApplicationListener<ApplicationRead
                             + ". Event #" + event.id() + " not send.";
                     log.warn(reason);
                     outboxRepository.updateEventStatus(event.id(), OutboxStatus.ERROR, reason);
+                    incrementMeterCounter(OutboxMeterCounter.PLUGIN_NOT_REGISTRY);
                     continue;
                 }
 
@@ -104,6 +111,7 @@ public class OutboxBatchPublisher implements ApplicationListener<ApplicationRead
                 successIds.add(event.id());
             } catch (Exception e) {
                 log.error("Fail to sent Event #{}.", event.id(), e);
+                incrementMeterCounter(OutboxMeterCounter.EVENT_SENDING_FAILED);
             }
         }
 
@@ -116,4 +124,11 @@ public class OutboxBatchPublisher implements ApplicationListener<ApplicationRead
             }
         }
     }
+
+    private void incrementMeterCounter(@NotNull OutboxMeterCounter counter) {
+        if(meterRegistry == null)
+            return;
+        meterRegistry.counter(counter.getCounterName(), "service", "publisher").increment();
+    }
+
 }
