@@ -1,11 +1,12 @@
 package io.github.dgavrikov.core.outbox.service;
 
+import io.github.dgavrikov.core.outbox.metric.OutboxMetricCounters;
+import io.github.dgavrikov.core.outbox.metric.OutboxMetricService;
+import io.github.dgavrikov.core.outbox.metric.OutboxMetricServices;
 import io.github.dgavrikov.core.outbox.model.OutboxEvent;
 import io.github.dgavrikov.core.outbox.properties.OutboxProperties;
 import io.github.dgavrikov.core.outbox.repository.OutboxRepository;
-import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
-import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationListener;
@@ -20,25 +21,26 @@ import java.util.concurrent.BlockingQueue;
 
 @Slf4j
 public class OutboxMaintenanceWorker implements ApplicationListener<ApplicationReadyEvent> {
+    private final static OutboxMetricServices METRIC_SERVICE = OutboxMetricServices.MAINTENANCE;
 
     private final BlockingQueue<OutboxEvent> outboxMemoryQueue;
     private final TaskScheduler outboxScheduler;
     private final OutboxProperties outboxProperties;
     private final OutboxRepository outboxRepository;
-    private final MeterRegistry meterRegistry;
+    private final OutboxMetricService outboxMetricService;
     private final int capacityThreshold;
 
     public OutboxMaintenanceWorker(BlockingQueue<OutboxEvent> outboxMemoryQueue,
                                    TaskScheduler outboxScheduler,
                                    OutboxProperties outboxProperties,
                                    OutboxRepository outboxRepository,
-                                   MeterRegistry meterRegistry) {
+                                   OutboxMetricService outboxMetricService) {
         this.outboxMemoryQueue = outboxMemoryQueue;
         this.outboxScheduler = outboxScheduler;
         this.outboxProperties = outboxProperties;
         this.outboxRepository = outboxRepository;
         this.capacityThreshold = (int) (outboxProperties.inMemoryQueue().capacity() * 0.5);
-        this.meterRegistry = meterRegistry;
+        this.outboxMetricService = outboxMetricService;
     }
 
 
@@ -57,10 +59,12 @@ public class OutboxMaintenanceWorker implements ApplicationListener<ApplicationR
     }
 
     private void recoveryLostEvents() {
+        log.trace("Recovery outbox worker started.");
+
         if (outboxMemoryQueue.size() > capacityThreshold) {
             log.debug("Outbox memory queue is heavily loaded (size: {}). Skipping recovery.",
                     outboxMemoryQueue.size());
-            incrementMeterCounter(OutboxMeterCounter.MEMORY_QUEUE_HEAVILY_LOADED);
+            outboxMetricService.increment(METRIC_SERVICE, OutboxMetricCounters.MEMORY_QUEUE_HEAVILY_LOADED);
             return;
         }
 
@@ -74,16 +78,18 @@ public class OutboxMaintenanceWorker implements ApplicationListener<ApplicationR
 
         if (lostEvents.isEmpty()) return;
 
-        log.debug("Recovery outbox worker found {} abandoned events. Pushing to memory queue.", lostEvents.size());
+        log.debug("Recovery outbox worker found {} events. Pushing to memory queue.", lostEvents.size());
 
         for (var event : lostEvents) {
             boolean added = outboxMemoryQueue.offer(event);
             if (!added) {
                 log.info("Outbox memory queue is FULL! Recovery process is stop.");
-                incrementMeterCounter(OutboxMeterCounter.MEMORY_QUEUE_IS_FULL);
+                outboxMetricService.increment(METRIC_SERVICE, OutboxMetricCounters.MEMORY_QUEUE_IS_FULL);
                 break;
             }
         }
+
+        log.trace("Recovery outbox worker finished.");
     }
 
     private void purgeSentEvents() {
@@ -104,16 +110,10 @@ public class OutboxMaintenanceWorker implements ApplicationListener<ApplicationR
             }
         } catch (Exception e) {
             log.error("Error on purge process outbox");
-            incrementMeterCounter(OutboxMeterCounter.CLEANUP_ERROR);
+            outboxMetricService.increment(METRIC_SERVICE, OutboxMetricCounters.CLEANUP_ERROR);
             throw new RuntimeException(e);
         }
         log.info("Outbox table purged. Deleted {} historical events.", deletedRows);
-    }
-
-    private void incrementMeterCounter(@NotNull OutboxMeterCounter counter) {
-        if (meterRegistry == null)
-            return;
-        meterRegistry.counter(counter.getCounterName(), "service", "maintenance").increment();
     }
 
 }

@@ -3,6 +3,7 @@ package io.github.dgavrikov.core.outbox;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.dgavrikov.core.config.SchedulerConfigurationBuilder;
 import io.github.dgavrikov.core.config.YamlPropertyLoaderFactory;
+import io.github.dgavrikov.core.outbox.metric.OutboxMetricService;
 import io.github.dgavrikov.core.outbox.model.OutboxEvent;
 import io.github.dgavrikov.core.outbox.model.OutboxPayloadPlugin;
 import io.github.dgavrikov.core.outbox.properties.OutboxProperties;
@@ -72,6 +73,12 @@ public class OutboxAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(OutboxMetricService.class)
+    public OutboxMetricService outboxMetricService (MeterRegistry meterRegistry) {
+        return new OutboxMetricService(meterRegistry);
+    }
+
+    @Bean
     @ConditionalOnMissingBean(OutboxBatchPublisher.class)
     public OutboxBatchPublisher outboxBatchPublisher(
             TaskScheduler outboxPublisherScheduler,
@@ -79,14 +86,14 @@ public class OutboxAutoConfiguration {
             Collection<OutboxPayloadPlugin<?>> outboxPayloadPluginCollection,
             OutboxProperties outboxProperties,
             OutboxRepository outboxRepository,
-            MeterRegistry meterRegistry
+            OutboxMetricService outboxMetricService
     ) {
         return new OutboxBatchPublisher(outboxPublisherScheduler,
                 outboxMemoryQueue,
                 outboxPayloadPluginCollection,
                 outboxProperties,
                 outboxRepository,
-                meterRegistry);
+                outboxMetricService);
     }
 
     @Bean
@@ -96,13 +103,13 @@ public class OutboxAutoConfiguration {
             TaskScheduler outboxMaintenanceScheduler,
             OutboxProperties outboxProperties,
             OutboxRepository outboxRepository,
-            MeterRegistry meterRegistry
+            OutboxMetricService outboxMetricService
     ) {
         return new OutboxMaintenanceWorker(outboxMemoryQueue,
                 outboxMaintenanceScheduler,
                 outboxProperties,
                 outboxRepository,
-                meterRegistry);
+                outboxMetricService);
     }
 
     @Bean
@@ -111,11 +118,11 @@ public class OutboxAutoConfiguration {
             BlockingQueue<OutboxEvent> outboxMemoryQueue,
             Collection<OutboxPayloadPlugin<?>> outboxPayloadPluginCollection,
             OutboxRepository outboxRepository,
-            MeterRegistry meterRegistry
+            OutboxMetricService outboxMetricService
     ) {
         return new OutboxPlatformCoordinator(outboxMemoryQueue,
                 outboxPayloadPluginCollection,
                 outboxRepository,
-                meterRegistry);
+                outboxMetricService);
     }
 }
