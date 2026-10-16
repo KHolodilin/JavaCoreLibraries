@@ -1,6 +1,6 @@
 package io.github.dgavrikov.core.outbox.metric;
 
-import io.github.dgavrikov.core.utils.MetricUtils;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -35,19 +35,18 @@ public class OutboxMetricService {
         if (meterRegistry == null)
             return;
 
-        for(var service : registryMaps.entrySet()) {
-            for(var counter : service.getValue()) {
-                MetricUtils.initialCounter(meterRegistry,
-                        counter.getCounterName(),
-                        counter.getDescription(),
-                        service.getKey().getServiceTag(),
-                        service.getKey().getServiceValue());
+        for (var service : registryMaps.entrySet()) {
+            for (var counter : service.getValue()) {
+                Counter.builder(counter.getCounterName())
+                        .description(counter.getDescription())
+                        .tag(service.getKey().getServiceTag(), service.getKey().getServiceValue())
+                        .register(meterRegistry);
             }
         }
     }
 
     public void increment(OutboxMetricServices service, OutboxMetricCounters counter) {
-        if(meterRegistry == null)
+        if (meterRegistry == null)
             return;
         meterRegistry.counter(counter.getCounterName(), service.getServiceTag(), service.getServiceValue()).increment();
     }
