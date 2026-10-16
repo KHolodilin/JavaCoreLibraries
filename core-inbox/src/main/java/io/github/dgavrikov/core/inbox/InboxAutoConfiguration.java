@@ -3,6 +3,7 @@ package io.github.dgavrikov.core.inbox;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.dgavrikov.core.config.SchedulerConfigurationBuilder;
 import io.github.dgavrikov.core.config.YamlPropertyLoaderFactory;
+import io.github.dgavrikov.core.inbox.metric.InboxMetricService;
 import io.github.dgavrikov.core.inbox.model.InboxEvent;
 import io.github.dgavrikov.core.inbox.model.InboxPayloadPlugin;
 import io.github.dgavrikov.core.inbox.properties.InboxProperties;
@@ -69,6 +70,12 @@ public class InboxAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(InboxMetricService.class)
+    public InboxMetricService outboxMetricService (MeterRegistry meterRegistry) {
+        return new InboxMetricService(meterRegistry);
+    }
+
+    @Bean
     @ConditionalOnMissingBean(InboxBatchProcessor.class)
     public InboxBatchProcessor inboxBatchProcessor(
             TaskScheduler inboxWorkerScheduler,
@@ -76,7 +83,7 @@ public class InboxAutoConfiguration {
             Collection<InboxPayloadPlugin<?>> plugins,
             InboxProperties properties,
             InboxRepository repository,
-            MeterRegistry meterRegistry
+            InboxMetricService inboxMetricService
     ) {
         return new InboxBatchProcessor(
                 inboxWorkerScheduler,
@@ -84,7 +91,7 @@ public class InboxAutoConfiguration {
                 plugins,
                 properties,
                 repository,
-                meterRegistry);
+                inboxMetricService);
     }
 
     @Bean
@@ -95,7 +102,7 @@ public class InboxAutoConfiguration {
             TaskScheduler inboxMaintenanceScheduler,
             InboxProperties properties,
             InboxRepository repository,
-            MeterRegistry meterRegistry
+            InboxMetricService inboxMetricService
     ) {
         return new InboxMaintenanceWorker(
                 inboxMemoryQueue,
@@ -103,7 +110,7 @@ public class InboxAutoConfiguration {
                 inboxMaintenanceScheduler,
                 properties,
                 repository,
-                meterRegistry);
+                inboxMetricService);
     }
 
     @Bean
@@ -112,12 +119,12 @@ public class InboxAutoConfiguration {
             BlockingQueue<InboxEvent<?>> inboxMemoryQueue,
             Collection<InboxPayloadPlugin<?>> plugins,
             InboxRepository repository,
-            MeterRegistry meterRegistry
+            InboxMetricService inboxMetricService
     ) {
         return new InboxPlatformCoordinator(
                 inboxMemoryQueue,
                 plugins,
                 repository,
-                meterRegistry);
+                inboxMetricService);
     }
 }

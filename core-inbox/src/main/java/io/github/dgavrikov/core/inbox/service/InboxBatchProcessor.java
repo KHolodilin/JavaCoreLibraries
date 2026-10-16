@@ -1,12 +1,14 @@
 package io.github.dgavrikov.core.inbox.service;
 
+import io.github.dgavrikov.core.inbox.metric.InboxMetricCounters;
+import io.github.dgavrikov.core.inbox.metric.InboxMetricService;
+import io.github.dgavrikov.core.inbox.metric.InboxMetricServices;
 import io.github.dgavrikov.core.inbox.model.InboxEvent;
 import io.github.dgavrikov.core.inbox.model.InboxPayloadPlugin;
 import io.github.dgavrikov.core.inbox.model.InboxStatus;
 import io.github.dgavrikov.core.inbox.properties.InboxProperties;
 import io.github.dgavrikov.core.inbox.repository.InboxRepository;
 import io.github.dgavrikov.core.service.VirtualThreadRateLimiter;
-import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.jetbrains.annotations.NotNull;
@@ -26,6 +28,8 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 public class InboxBatchProcessor implements ApplicationListener<ApplicationReadyEvent> {
+    private final static InboxMetricServices METRIC_SERVICE = InboxMetricServices.PROCESSOR;
+
     /**
      * Heterogeneous in-memory buffer queue utilizing wildcards to transport diverse domain context objects.
      */
@@ -61,7 +65,7 @@ public class InboxBatchProcessor implements ApplicationListener<ApplicationReady
      */
     private final TaskScheduler taskScheduler;
 
-    private final MeterRegistry meterRegistry;
+    private final InboxMetricService inboxMetricService;
 
     /**
      * Initializes the core batch execution pipeline, builds internal plugin routing tables,
@@ -73,13 +77,13 @@ public class InboxBatchProcessor implements ApplicationListener<ApplicationReady
             Collection<InboxPayloadPlugin<?>> plugins,
             InboxProperties properties,
             InboxRepository repository,
-            MeterRegistry meterRegistry
+            InboxMetricService inboxMetricService
     ) {
         this.taskScheduler = taskScheduler;
         this.inboxMemoryQueue = inboxMemoryQueue;
         this.properties = properties;
         this.repository = repository;
-        this.meterRegistry = meterRegistry;
+        this.inboxMetricService = inboxMetricService;
         this.virtualThreadExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
         this.pluginRegistry = CollectionUtils.isEmpty(plugins)
@@ -170,7 +174,7 @@ public class InboxBatchProcessor implements ApplicationListener<ApplicationReady
     private ExecutionResult executeSingleEvent(InboxEvent<?> event) {
         InboxPayloadPlugin<?> plugin = pluginRegistry.get(event.eventType().name());
         if (plugin == null) {
-            incrementMeterCounter(InboxMeterCounter.PLUGIN_NOT_REGISTRY);
+            inboxMetricService.increment(METRIC_SERVICE, InboxMetricCounters.PLUGIN_NOT_REGISTRY);
             return new ExecutionResult(event.messageId(), false, "No plugin registered for type: " + event.eventType().asString());
         }
 
@@ -185,7 +189,7 @@ public class InboxBatchProcessor implements ApplicationListener<ApplicationReady
             return new ExecutionResult(event.messageId(), true, null);
         } catch (Exception e) {
             log.error("Error executing business logic for inbox event: {}", event.messageId(), e);
-            incrementMeterCounter(InboxMeterCounter.EVENT_PROCESSING_FAILED);
+            inboxMetricService.increment(METRIC_SERVICE, InboxMetricCounters.EVENT_PROCESSING_FAILED);
             return new ExecutionResult(event.messageId(), false, e.getMessage());
         }
     }
@@ -206,9 +210,4 @@ public class InboxBatchProcessor implements ApplicationListener<ApplicationReady
     private record ExecutionResult(String messageId, boolean isSuccess, String reason) {
     }
 
-    private void incrementMeterCounter(@NotNull InboxMeterCounter counter) {
-        if (meterRegistry == null)
-            return;
-        meterRegistry.counter(counter.getCounterName(), "service", "processor").increment();
-    }
 }
