@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.databind.ObjectWriter;
+import io.github.dgavrikov.core.http.PathExclusion;
 import io.github.dgavrikov.core.masking.MaskedPattern;
 import io.github.dgavrikov.core.masking.MaskedType;
 import io.github.dgavrikov.core.masking.MaskingAnnotationIntrospector;
@@ -55,8 +56,13 @@ public class CoreLoggingConfiguration {
 
     @Bean("logbookHeaderFilter")
     public BodyFilter logbookHeaderFilter(
-            MdcLoggingProperties mdcLoggingProperties) {
-        return new LogbookJsonPathHeaderFilter(mdcLoggingProperties.getMaskedHeaders());
+            MdcLoggingProperties maskingProperties) {
+        return new LogbookJsonPathHeaderFilter(maskingProperties.getMaskedHeaders());
+    }
+
+    @Bean("pathExclusion")
+    public PathExclusion pathExclusion(MdcLoggingProperties maskingProperties) {
+        return new PathExclusion(maskingProperties.getExcludeUrls());
     }
 
     private ObjectWriter maskingObjectMapper(Jackson2ObjectMapperBuilder builder) {

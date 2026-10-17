@@ -1,5 +1,6 @@
 package io.github.dgavrikov.core.service.logging.converter;
 
+import io.github.dgavrikov.core.http.PathExclusion;
 import io.github.dgavrikov.core.masking.MaskingMarker;
 import lombok.experimental.Delegate;
 import lombok.extern.slf4j.Slf4j;
@@ -21,10 +22,10 @@ import java.util.Set;
 
 @Slf4j
 public record LoggingHttpMessageConverter(
-        @Delegate MappingJackson2HttpMessageConverter delegate
+        @Delegate MappingJackson2HttpMessageConverter delegate,
+        PathExclusion exclusionService
 ) implements HttpMessageConverter<Object> {
     private static final long DATA_SIZE = DataSize.ofKilobytes(256L).toBytes();
-    private static final Set<String> EXCLUDED_TYPE = Set.of("actuator");
 
     @Override
     public boolean canRead(@NonNull Class<?> clazz, @Nullable MediaType mediaType) {
@@ -62,26 +63,21 @@ public record LoggingHttpMessageConverter(
     }
 
     @Override
-    public void write(@NonNull Object object, @Nullable MediaType contentType, @NonNull HttpOutputMessage outputMessage) throws IOException, HttpMessageNotWritableException {
-        var subType = contentType != null ? contentType.getSubtype() : "";
-
-        boolean isExcluded = false;
-        for (String excluded : EXCLUDED_TYPE) {
-            if (subType.contains(excluded)) {
-                isExcluded = true;
-                break;
-            }
-        }
-
-        if (!isExcluded) {
-            log(object, outputMessage);
-        }
-
+    public void write(@NonNull Object object,
+                      @Nullable MediaType contentType,
+                      @NonNull HttpOutputMessage outputMessage) throws IOException, HttpMessageNotWritableException {
+        log(object, outputMessage);
         delegate.write(object, contentType, outputMessage);
     }
 
     private void log(Object body, HttpMessage message) {
         if (!log.isDebugEnabled())
+            return;
+
+        if(exclusionService != null && exclusionService.isExcluded())
+            return;
+
+        if(lengthOf(body) > DATA_SIZE)
             return;
 
         try {
