@@ -70,13 +70,11 @@ public class InboxAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnMissingBean(InboxMetricService.class)
     public InboxMetricService outboxMetricService (MeterRegistry meterRegistry) {
         return new InboxMetricService(meterRegistry);
     }
 
     @Bean
-    @ConditionalOnMissingBean(InboxBatchProcessor.class)
     public InboxBatchProcessor inboxBatchProcessor(
             TaskScheduler inboxWorkerScheduler,
             BlockingQueue<InboxEvent<?>> inboxMemoryQueue,
@@ -95,7 +93,6 @@ public class InboxAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnMissingBean(InboxMaintenanceWorker.class)
     public InboxMaintenanceWorker inboxMaintenanceWorker(
             BlockingQueue<InboxEvent<?>> inboxMemoryQueue,
             Collection<InboxPayloadPlugin<?>> plugins,
@@ -114,7 +111,6 @@ public class InboxAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnMissingBean(InboxPlatformCoordinator.class)
     public InboxPlatformCoordinator inboxPlatformCoordinator(
             BlockingQueue<InboxEvent<?>> inboxMemoryQueue,
             Collection<InboxPayloadPlugin<?>> plugins,
