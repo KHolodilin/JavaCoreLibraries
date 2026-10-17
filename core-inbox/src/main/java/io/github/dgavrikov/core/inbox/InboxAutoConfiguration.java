@@ -3,6 +3,7 @@ package io.github.dgavrikov.core.inbox;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.dgavrikov.core.config.SchedulerConfigurationBuilder;
 import io.github.dgavrikov.core.config.YamlPropertyLoaderFactory;
+import io.github.dgavrikov.core.inbox.metric.InboxMetricService;
 import io.github.dgavrikov.core.inbox.model.InboxEvent;
 import io.github.dgavrikov.core.inbox.model.InboxPayloadPlugin;
 import io.github.dgavrikov.core.inbox.properties.InboxProperties;
@@ -11,6 +12,8 @@ import io.github.dgavrikov.core.inbox.repository.InboxRepositoryDefault;
 import io.github.dgavrikov.core.inbox.service.InboxBatchProcessor;
 import io.github.dgavrikov.core.inbox.service.InboxMaintenanceWorker;
 import io.github.dgavrikov.core.inbox.service.InboxPlatformCoordinator;
+import io.micrometer.core.instrument.Meter;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -67,49 +70,57 @@ public class InboxAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnMissingBean(InboxBatchProcessor.class)
+    public InboxMetricService outboxMetricService (MeterRegistry meterRegistry) {
+        return new InboxMetricService(meterRegistry);
+    }
+
+    @Bean
     public InboxBatchProcessor inboxBatchProcessor(
             TaskScheduler inboxWorkerScheduler,
             BlockingQueue<InboxEvent<?>> inboxMemoryQueue,
             Collection<InboxPayloadPlugin<?>> plugins,
             InboxProperties properties,
-            InboxRepository repository
+            InboxRepository repository,
+            InboxMetricService inboxMetricService
     ) {
         return new InboxBatchProcessor(
                 inboxWorkerScheduler,
                 inboxMemoryQueue,
                 plugins,
                 properties,
-                repository);
+                repository,
+                inboxMetricService);
     }
 
     @Bean
-    @ConditionalOnMissingBean(InboxMaintenanceWorker.class)
     public InboxMaintenanceWorker inboxMaintenanceWorker(
             BlockingQueue<InboxEvent<?>> inboxMemoryQueue,
             Collection<InboxPayloadPlugin<?>> plugins,
             TaskScheduler inboxMaintenanceScheduler,
             InboxProperties properties,
-            InboxRepository repository
+            InboxRepository repository,
+            InboxMetricService inboxMetricService
     ) {
         return new InboxMaintenanceWorker(
                 inboxMemoryQueue,
                 plugins,
                 inboxMaintenanceScheduler,
                 properties,
-                repository);
+                repository,
+                inboxMetricService);
     }
 
     @Bean
-    @ConditionalOnMissingBean(InboxPlatformCoordinator.class)
     public InboxPlatformCoordinator inboxPlatformCoordinator(
             BlockingQueue<InboxEvent<?>> inboxMemoryQueue,
             Collection<InboxPayloadPlugin<?>> plugins,
-            InboxRepository repository
+            InboxRepository repository,
+            InboxMetricService inboxMetricService
     ) {
         return new InboxPlatformCoordinator(
                 inboxMemoryQueue,
                 plugins,
-                repository);
+                repository,
+                inboxMetricService);
     }
 }

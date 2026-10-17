@@ -1,5 +1,8 @@
 package io.github.dgavrikov.core.outbox.service;
 
+import io.github.dgavrikov.core.outbox.metric.OutboxMetricCounters;
+import io.github.dgavrikov.core.outbox.metric.OutboxMetricService;
+import io.github.dgavrikov.core.outbox.metric.OutboxMetricServices;
 import io.github.dgavrikov.core.outbox.model.OutboxEvent;
 import io.github.dgavrikov.core.outbox.model.OutboxPayloadPlugin;
 import io.github.dgavrikov.core.outbox.model.OutboxStatus;
@@ -24,6 +27,8 @@ import java.util.stream.Collectors;
 
 @Slf4j
 public class OutboxBatchPublisher implements ApplicationListener<ApplicationReadyEvent> {
+    private final static OutboxMetricServices METRIC_SERVICE = OutboxMetricServices.PUBLISHER;
+
     private final BlockingQueue<OutboxEvent> outboxMemoryQueue;
     private final Map<String, OutboxPayloadPlugin<?>> factoryRegistry;
     // GroupID -> Лимитер
@@ -31,17 +36,21 @@ public class OutboxBatchPublisher implements ApplicationListener<ApplicationRead
     private final TaskScheduler outboxScheduler;
     private final OutboxProperties outboxProperties;
     private final OutboxRepository outboxRepository;
+    private final OutboxMetricService outboxMetricService;
 
     public OutboxBatchPublisher(
             TaskScheduler outboxScheduler,
             BlockingQueue<OutboxEvent> outboxMemoryQueue,
             Collection<OutboxPayloadPlugin<?>> outboxPayloadPluginCollection,
             OutboxProperties outboxProperties,
-            OutboxRepository outboxRepository) {
+            OutboxRepository outboxRepository,
+            OutboxMetricService outboxMetricService) {
         this.outboxMemoryQueue = outboxMemoryQueue;
         this.outboxScheduler = outboxScheduler;
         this.outboxProperties = outboxProperties;
         this.outboxRepository = outboxRepository;
+        this.outboxMetricService = outboxMetricService;
+
         factoryRegistry = CollectionUtils.isEmpty(outboxPayloadPluginCollection)
                 ? Map.of()
                 : outboxPayloadPluginCollection.stream()
@@ -92,6 +101,7 @@ public class OutboxBatchPublisher implements ApplicationListener<ApplicationRead
                             + ". Event #" + event.id() + " not send.";
                     log.warn(reason);
                     outboxRepository.updateEventStatus(event.id(), OutboxStatus.ERROR, reason);
+                    outboxMetricService.increment(METRIC_SERVICE, OutboxMetricCounters.PLUGIN_NOT_REGISTRY);
                     continue;
                 }
 
@@ -104,6 +114,7 @@ public class OutboxBatchPublisher implements ApplicationListener<ApplicationRead
                 successIds.add(event.id());
             } catch (Exception e) {
                 log.error("Fail to sent Event #{}.", event.id(), e);
+                outboxMetricService.increment(METRIC_SERVICE, OutboxMetricCounters.EVENT_SENDING_FAILED);
             }
         }
 
@@ -116,4 +127,5 @@ public class OutboxBatchPublisher implements ApplicationListener<ApplicationRead
             }
         }
     }
+
 }

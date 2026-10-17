@@ -1,10 +1,14 @@
 package io.github.dgavrikov.core.inbox.service;
 
+import io.github.dgavrikov.core.inbox.metric.InboxMetricCounters;
+import io.github.dgavrikov.core.inbox.metric.InboxMetricService;
+import io.github.dgavrikov.core.inbox.metric.InboxMetricServices;
 import io.github.dgavrikov.core.inbox.model.InboxEvent;
 import io.github.dgavrikov.core.inbox.model.InboxPayloadPlugin;
 import io.github.dgavrikov.core.inbox.model.InboxStatus;
 import io.github.dgavrikov.core.inbox.properties.InboxProperties;
 import io.github.dgavrikov.core.inbox.repository.InboxRepository;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.jetbrains.annotations.NotNull;
@@ -28,23 +32,39 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 public class InboxMaintenanceWorker implements ApplicationListener<ApplicationReadyEvent> {
-    /** Heterogeneous internal low-latency memory buffer streaming target queue. */
+    private final static InboxMetricServices METRIC_SERVICE = InboxMetricServices.MAINTENANCE;
+
+    /**
+     * Heterogeneous internal low-latency memory buffer streaming target queue.
+     */
     private final BlockingQueue<InboxEvent<?>> inboxMemoryQueue;
 
-    /** System-wide extension plugin dictionary mapping explicit text discriminator names to functional handlers. */
+    /**
+     * System-wide extension plugin dictionary mapping explicit text discriminator names to functional handlers.
+     */
     private final Map<String, InboxPayloadPlugin<?>> pluginRegistry;
 
-    /** Localized immutable configuration property descriptor data record. */
+    /**
+     * Localized immutable configuration property descriptor data record.
+     */
     private final InboxProperties inboxProperties;
 
-    /** Primary transactional data access database layer adapter hook. */
+    /**
+     * Primary transactional data access database layer adapter hook.
+     */
     private final InboxRepository inboxRepository;
 
-    /** Isolated system scheduling framework task driver running background sweep heartbeats. */
+    /**
+     * Isolated system scheduling framework task driver running background sweep heartbeats.
+     */
     private final TaskScheduler taskScheduler;
 
-    /** Reactive backpressure threshold metric calculated dynamically to guard against memory allocation overflow traps. */
+    /**
+     * Reactive backpressure threshold metric calculated dynamically to guard against memory allocation overflow traps.
+     */
     private final int capacityThreshold;
+
+    private final InboxMetricService inboxMetricService;
 
     /**
      * Initializes the background infrastructure maintenance supervisor worker instance and builds
@@ -55,12 +75,14 @@ public class InboxMaintenanceWorker implements ApplicationListener<ApplicationRe
             Collection<InboxPayloadPlugin<?>> plugins,
             TaskScheduler scheduler,
             InboxProperties inboxProperties,
-            InboxRepository inboxRepository
+            InboxRepository inboxRepository,
+            InboxMetricService inboxMetricService
     ) {
         this.inboxMemoryQueue = inboxMemoryQueue;
         this.inboxProperties = inboxProperties;
         this.inboxRepository = inboxRepository;
         this.taskScheduler = scheduler;
+        this.inboxMetricService = inboxMetricService;
         this.capacityThreshold = (int) (inboxProperties.inMemoryQueue().capacity() * 0.5);
 
         this.pluginRegistry = CollectionUtils.isEmpty(plugins)
@@ -92,6 +114,7 @@ public class InboxMaintenanceWorker implements ApplicationListener<ApplicationRe
     private void runRecovery() {
         if (inboxMemoryQueue.size() > capacityThreshold) {
             log.debug("Recovery engine skipped. Memory queue usage over 50%. Current size: {}", inboxMemoryQueue.size());
+            inboxMetricService.increment(METRIC_SERVICE, InboxMetricCounters.MEMORY_QUEUE_HEAVILY_LOADED);
             return;
         }
 
@@ -119,6 +142,7 @@ public class InboxMaintenanceWorker implements ApplicationListener<ApplicationRe
                 log.error("No plugin registered for type: {}. Event {} marked as failed.",
                         rawEvent.eventType().asString(), rawEvent.messageId());
                 poisonPillIds.add(rawEvent.messageId());
+                inboxMetricService.increment(METRIC_SERVICE, InboxMetricCounters.PLUGIN_NOT_REGISTRY);
                 continue;
             }
 
@@ -129,6 +153,7 @@ public class InboxMaintenanceWorker implements ApplicationListener<ApplicationRe
                 // Intercept payload schemas corrupted at rest (Poison Pills) and flag them for permanent isolation
                 log.error("Poison pill detected during recovery for messageId: {}. Marking as FAILED.", rawEvent.messageId());
                 poisonPillIds.add(rawEvent.messageId());
+                inboxMetricService.increment(METRIC_SERVICE, InboxMetricCounters.PAYLOAD_VALIDATION_ERROR);
                 continue;
             }
 
@@ -146,6 +171,7 @@ public class InboxMaintenanceWorker implements ApplicationListener<ApplicationRe
                 // Buffer capacity limit reached. Terminate execution loop immediately.
                 // Records left behind remain safely configured in a 'PROCESSING' state inside PostgreSQL for a later cycle.
                 log.warn("Queue capacity limit reached during recovery. Event {} and subsequent left in DB.", rawEvent.messageId());
+                inboxMetricService.increment(METRIC_SERVICE, InboxMetricCounters.MEMORY_QUEUE_IS_FULL);
                 break;
             }
         }
@@ -178,7 +204,9 @@ public class InboxMaintenanceWorker implements ApplicationListener<ApplicationRe
             }
         } catch (Exception e) {
             log.error("Error on cleanup historical process inbox.", e);
+            inboxMetricService.increment(METRIC_SERVICE, InboxMetricCounters.CLEANUP_ERROR);
         }
         log.info("Inbox table purged. Deleted {} historical processed events.", deletedRows);
     }
+
 }
