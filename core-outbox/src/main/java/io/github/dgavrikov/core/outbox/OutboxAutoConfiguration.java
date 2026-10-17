@@ -73,13 +73,11 @@ public class OutboxAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnMissingBean(OutboxMetricService.class)
     public OutboxMetricService outboxMetricService (MeterRegistry meterRegistry) {
         return new OutboxMetricService(meterRegistry);
     }
 
     @Bean
-    @ConditionalOnMissingBean(OutboxBatchPublisher.class)
     public OutboxBatchPublisher outboxBatchPublisher(
             TaskScheduler outboxPublisherScheduler,
             BlockingQueue<OutboxEvent> outboxMemoryQueue,
@@ -97,7 +95,6 @@ public class OutboxAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnMissingBean(OutboxMaintenanceWorker.class)
     public OutboxMaintenanceWorker outboxMaintenanceWorker(
             BlockingQueue<OutboxEvent> outboxMemoryQueue,
             TaskScheduler outboxMaintenanceScheduler,
@@ -113,7 +110,6 @@ public class OutboxAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnMissingBean(OutboxPlatformCoordinator.class)
     public OutboxPlatformCoordinator outboxPlatformCoordinator(
             BlockingQueue<OutboxEvent> outboxMemoryQueue,
             Collection<OutboxPayloadPlugin<?>> outboxPayloadPluginCollection,
