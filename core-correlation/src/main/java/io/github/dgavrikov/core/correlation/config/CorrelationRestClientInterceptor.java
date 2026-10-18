@@ -12,36 +12,30 @@ import java.util.Map;
 
 public class CorrelationRestClientInterceptor implements ClientHttpRequestInterceptor {
     private final HostInfo hostInfo;
+    private final Map<String, String> effectiveMapping;
 
-    public CorrelationRestClientInterceptor(HostInfo hostInfo) {
+
+    public CorrelationRestClientInterceptor(
+            HostInfo hostInfo,
+            Map<String, String> effectiveMapping) {
         this.hostInfo = hostInfo;
+        this.effectiveMapping = effectiveMapping;
     }
 
     @Override
     public @NonNull ClientHttpResponse intercept(@NonNull HttpRequest request, byte @NonNull [] body, @NonNull ClientHttpRequestExecution execution) throws IOException {
-        // 1. Add data for the current initiator host
         addHeader(request, CorrelationHeaders.INITIATOR_IP, hostInfo.localIp());
         addHeader(request, CorrelationHeaders.INITIATOR_HOST, hostInfo.localHostname());
         addHeader(request, CorrelationHeaders.INITIATOR_SVC, hostInfo.serviceName());
 
-        // 2. DYNAMIC FORWARDING: We take everything currently in the MDC and move it into HTTP headers.
-        Map<String, String> mdcContext = MDC.getCopyOfContextMap();
-        if (mdcContext != null) {
-            mapMdcToHeader(request, mdcContext, CorrelationMdcKeys.CORRELATION_ID, CorrelationHeaders.CORRELATION_ID);
-            mapMdcToHeader(request, mdcContext, CorrelationMdcKeys.MESSAGE_ID, CorrelationHeaders.MESSAGE_ID);
-            mapMdcToHeader(request, mdcContext, CorrelationMdcKeys.CALL_ID, CorrelationHeaders.CALL_ID);
-            mapMdcToHeader(request, mdcContext, CorrelationMdcKeys.SESSION_ID, CorrelationHeaders.SESSION_ID);
-            mapMdcToHeader(request, mdcContext, CorrelationMdcKeys.MDM_ID, CorrelationHeaders.MDM_ID);
+        for (Map.Entry<String, String> entry : effectiveMapping.entrySet()) {
+            String mdcValue = MDC.get(entry.getKey());
+            if (mdcValue != null && !mdcValue.isBlank()) {
+                request.getHeaders().add(entry.getValue(), mdcValue);
+            }
         }
 
         return execution.execute(request, body);
-    }
-
-    private void mapMdcToHeader(HttpRequest request, Map<String, String> mdc, String mdcKey, String headerName) {
-        String value = mdc.get(mdcKey);
-        if (value != null && !value.isBlank()) {
-            request.getHeaders().add(headerName, value);
-        }
     }
 
     private void addHeader(HttpRequest request, String header, String value) {
