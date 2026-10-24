@@ -1,6 +1,5 @@
 package io.github.dgavrikov.core.config;
 
-import io.github.dgavrikov.core.http.PathExclusion;
 import io.github.dgavrikov.core.http.WebResponseHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -9,7 +8,7 @@ import org.springframework.context.annotation.Configuration;
 public class CoreWebClientConfiguration {
 
     @Bean("webResponseHandler")
-    public WebResponseHandler webResponseHandler(PathExclusion pathExclusion){
-        return new WebResponseHandler(pathExclusion);
+    public WebResponseHandler webResponseHandler() {
+        return new WebResponseHandler();
     }
 }

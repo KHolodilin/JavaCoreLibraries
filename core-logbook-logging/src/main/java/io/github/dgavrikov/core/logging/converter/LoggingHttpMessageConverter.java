@@ -1,6 +1,6 @@
-package io.github.dgavrikov.core.service.logging.converter;
+package io.github.dgavrikov.core.logging.converter;
 
-import io.github.dgavrikov.core.http.PathExclusion;
+import io.github.dgavrikov.core.logging.service.PathExclusion;
 import io.github.dgavrikov.core.masking.MaskingMarker;
 import lombok.experimental.Delegate;
 import lombok.extern.slf4j.Slf4j;
@@ -18,7 +18,6 @@ import org.springframework.util.unit.DataSize;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Set;
 
 @Slf4j
 public record LoggingHttpMessageConverter(
@@ -52,7 +51,10 @@ public record LoggingHttpMessageConverter(
                 log(obj, inputMessage);
             } catch (Exception e) {
                 var body = new String(cachedInputMessage.getBodyAsByteArray(), StandardCharsets.UTF_8);
-                log.debug(MaskingMarker.MASKING_JSON_ALL_MARKER, "\nError convert to Class {} Body: {}\n", clazz, body);
+                if (exclusionService == null || !exclusionService.isExcluded(inputMessage)) {
+                    log.debug(MaskingMarker.MASKING_JSON_ALL_MARKER, "\nError convert to Class {} Body: {}\n", clazz, body);
+                }
+
                 throw e;
             }
         } else {
@@ -74,16 +76,13 @@ public record LoggingHttpMessageConverter(
         if (!log.isDebugEnabled())
             return;
 
-        if(exclusionService != null && exclusionService.isExcluded())
+        if(exclusionService != null && exclusionService.isExcluded(message))
             return;
 
         if(lengthOf(body) > DATA_SIZE)
             return;
 
         try {
-            if (lengthOf(body) > DATA_SIZE)
-                return;
-
             if (message instanceof HttpRequest) {
                 writeLog(body, "\n>>> Body: {}\n");
             } else if (message instanceof ClientHttpResponse) {

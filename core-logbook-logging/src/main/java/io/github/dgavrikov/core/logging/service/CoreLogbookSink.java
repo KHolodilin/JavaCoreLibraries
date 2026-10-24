@@ -1,10 +1,8 @@
 package io.github.dgavrikov.core.logging.service;
 
-import io.github.dgavrikov.core.http.PathExclusion;
 import io.github.dgavrikov.core.masking.MaskingMarker;
 import io.github.dgavrikov.core.properties.MdcLoggingProperties;
 import io.github.dgavrikov.core.utils.Constants;
-import io.github.dgavrikov.core.utils.ObjectUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;

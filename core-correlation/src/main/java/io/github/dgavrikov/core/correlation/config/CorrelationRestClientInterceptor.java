@@ -2,6 +2,7 @@ package io.github.dgavrikov.core.correlation.config;
 
 import org.jspecify.annotations.NonNull;
 import org.slf4j.MDC;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpRequest;
 import org.springframework.http.client.ClientHttpRequestExecution;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
@@ -35,7 +36,21 @@ public class CorrelationRestClientInterceptor implements ClientHttpRequestInterc
             }
         }
 
-        return execution.execute(request, body);
+        var response = execution.execute(request, body);
+
+        return new ClientHttpResponseWrapper(response) {
+            private HttpHeaders modifiedHeaders;
+
+            @Override
+            public @NonNull HttpHeaders getHeaders() {
+                if(modifiedHeaders == null) {
+                    modifiedHeaders = new HttpHeaders();
+                    modifiedHeaders.putAll(super.getHeaders());
+                    modifiedHeaders.add(CorrelationHeaders.PATH, request.getURI().getPath());
+                }
+                return modifiedHeaders;
+            }
+        };
     }
 
     private void addHeader(HttpRequest request, String header, String value) {
